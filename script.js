@@ -40,87 +40,51 @@ function initMap() {
         });
     }
 
-    const img = new Image();
-    img.src = imageUrl;
-
-    img.onload = function () {
-        const w = this.naturalWidth;
-        const h = this.naturalHeight;
-        const bounds = [[0, 0], [h, w]];
-
-        const imageOverlay = L.imageOverlay(imageUrl, bounds).addTo(map);
-
-// ให้รูปพอดีกับหน้าจอ
-map.fitBounds(bounds, {
-    padding: [0, 0],
-    animate: false
-});
-
-// คำนวณ Zoom ที่พอดี
-const fitZoom = map.getBoundsZoom(bounds);
-
-// ล็อกไม่ให้ Zoom ออกจนรูปเล็ก
-map.setMinZoom(fitZoom);
-
-// ใช้ Zoom ที่คำนวณได้
-map.setZoom(map.getZoom() + 0.49);
-
-// จำกัดการลากออกนอกแผนที่
-map.setMaxBounds(bounds);
-
-// รีเฟรชหลังโหลดเสร็จ
-setTimeout(() => {
-    map.invalidateSize();
-    map.fitBounds(bounds, {
-        padding: [0, 0],
-        animate: false
-    });
-}, 100);
-
-        // ฟังก์ชันอัปเดตหรือตรวจสอบกรณีไม่มีคอมเมนต์
-        function checkEmptyComments() {
-            const commentsDiv = document.getElementById("binComments");
-            // ถ้าไม่มีลูกอยู่เลย หรือมีแต่ข้อความว่างเปล่า ให้ใส่ข้อความเริ่มต้น
-            if (commentsDiv.children.length === 0) {
-                commentsDiv.innerHTML = `<div class="empty-comment-placeholder">ยังไม่มีความคิดเห็น</div>`;
-            }
+    // ฟังก์ชันอัปเดตหรือตรวจสอบกรณีไม่มีคอมเมนต์
+    function checkEmptyComments() {
+        const commentsDiv = document.getElementById("binComments");
+        if (!commentsDiv) return;
+        if (commentsDiv.children.length === 0) {
+            commentsDiv.innerHTML = `<div class="empty-comment-placeholder">ยังไม่มีความคิดเห็น</div>`;
         }
+    }
 
-        function bindMarkerEvents(marker, data) {
-            marker.on("click", (e) => {
-                L.DomEvent.stopPropagation(e); 
+    function bindMarkerEvents(marker, data) {
+        marker.on("click", (e) => {
+            L.DomEvent.stopPropagation(e); 
 
-                exitAddMode();
+            exitAddMode();
 
-                document.getElementById("sidebarPlaceholder").style.display = "none";
-                document.getElementById("sidebarContent").style.display = "flex";
+            document.getElementById("sidebarPlaceholder").style.display = "none";
+            document.getElementById("sidebarContent").style.display = "flex";
 
-                document.getElementById("binTitle").textContent = data.title;
-                document.getElementById("binType").textContent = data.type;
-                document.getElementById("binColor").textContent = data.color;
-                document.getElementById("binLocation").textContent = data.location;
-                document.getElementById("binUpdate").textContent = data.update;
-                document.getElementById("binImage").src = data.image;
+            document.getElementById("binTitle").textContent = data.title;
+            document.getElementById("binType").textContent = data.type;
+            document.getElementById("binColor").textContent = data.color;
+            document.getElementById("binLocation").textContent = data.location;
+            document.getElementById("binUpdate").textContent = data.update;
+            document.getElementById("binImage").src = data.image;
 
-                // 🌟 เคลียร์ค่าเริ่มต้น และเรียกฟังก์ชันใส่คำว่า "ยังไม่มีความคิดเห็น"
-                document.getElementById("binComments").innerHTML = ``;
-                checkEmptyComments();
-            });
-        }
+            document.getElementById("binComments").innerHTML = ``;
+            checkEmptyComments();
+        });
+    }
 
+    // ===================================================
+    // 🔄 ฟังก์ชัน จัดการสถานะโหมดเพิ่มถังขยะ
+    // ===================================================
+    const modeBtn = document.getElementById("addBinModeBtn");
 
-        // ===================================================
-        // 🔄 ฟังก์ชัน จัดการสถานะโหมดเพิ่มถังขยะ
-        // ===================================================
-        const modeBtn = document.getElementById("addBinModeBtn");
-
-        function exitAddMode() {
-            isAddMode = false;
+    function exitAddMode() {
+        isAddMode = false;
+        if (modeBtn) {
             modeBtn.classList.remove("active");
             modeBtn.querySelector("span").textContent = "เพิ่มถังขยะ";
-            document.getElementById("addBinModal").style.display = "none";
         }
+        document.getElementById("addBinModal").style.display = "none";
+    }
 
+    if (modeBtn) {
         modeBtn.addEventListener("click", () => {
             isAddMode = !isAddMode; 
 
@@ -132,25 +96,26 @@ setTimeout(() => {
                 exitAddMode();
             }
         });
+    }
 
+    // ===================================================
+    // 📍 EVENT: คลิกบนแผนที่ -> เปิดหน้าต่างลอย (Modal)
+    // ===================================================
+    map.on("click", (e) => {
+        if (!isAddMode) return; 
 
-        // ===================================================
-        // 📍 EVENT: คลิกบนแผนที่ -> เปิดหน้าต่างลอย (Modal)
-        // ===================================================
-        map.on("click", (e) => {
-            if (!isAddMode) return; 
+        tempLatLng = e.latlng; 
 
-            tempLatLng = e.latlng; 
+        document.getElementById("addBinModal").style.display = "flex";
+        document.getElementById("newBinLocation").value = "";
+    });
 
-            document.getElementById("addBinModal").style.display = "flex";
-            document.getElementById("newBinLocation").value = "";
-        });
-
-
-        // ===================================================
-        // 💾 EVENT: ปุ่มบันทึกข้อมูลถังขยะใหม่ในหน้าต่างลอย
-        // ===================================================
-        document.getElementById("saveBinBtn").addEventListener("click", () => {
+    // ===================================================
+    // 💾 EVENT: ปุ่มบันทึกข้อมูลถังขยะใหม่ในหน้าต่างลอย
+    // ===================================================
+    const saveBinBtn = document.getElementById("saveBinBtn");
+    if (saveBinBtn) {
+        saveBinBtn.addEventListener("click", () => {
             const type = document.getElementById("newBinType").value;
             const locationInput = document.getElementById("newBinLocation").value.trim();
 
@@ -187,62 +152,96 @@ setTimeout(() => {
             tempLatLng = null; 
             newMarker.fire("click"); 
         });
+    }
 
-
-        // ===================================================
-        // EVENT: กลุ่มปุ่มปิดหน้าต่างต่างๆ
-        // ===================================================
-        document.querySelector(".close-sidebar-btn").addEventListener("click", () => {
+    // ===================================================
+    // EVENT: กลุ่มปุ่มปิดหน้าต่างต่างๆ
+    // ===================================================
+    const closeSidebarBtn = document.querySelector(".close-sidebar-btn");
+    if (closeSidebarBtn) {
+        closeSidebarBtn.addEventListener("click", () => {
             document.getElementById("sidebarContent").style.display = "none";
             document.getElementById("sidebarPlaceholder").style.display = "flex";
         });
+    }
 
-        document.getElementById("closeModalBtn").addEventListener("click", () => {
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener("click", () => {
             exitAddMode();
         });
+    }
 
+    // ===================================================
+    // EVENT: พิมพ์ส่งคอมเมนต์ในกล่องแชทหลัก
+    // ===================================================
+    const submitBtn = document.querySelector(".submit-report-btn");
+    const reportInput = document.querySelector(".report-input");
 
-        // ===================================================
-        // EVENT: พิมพ์ส่งคอมเมนต์ในกล่องแชทหลัก
-        // ===================================================
-        const submitBtn = document.querySelector(".submit-report-btn");
-        const reportInput = document.querySelector(".report-input");
+    if (submitBtn && reportInput) {
+        submitBtn.addEventListener("click", () => {
+            const text = reportInput.value.trim();
+            if (text === "") return;
 
-        if (submitBtn && reportInput) {
-            submitBtn.addEventListener("click", () => {
-                const text = reportInput.value.trim();
-                if (text === "") return;
+            const commentsDiv = document.getElementById("binComments");
+            if (!commentsDiv) return;
+            
+            const placeholder = commentsDiv.querySelector(".empty-comment-placeholder");
+            if (placeholder) {
+                commentsDiv.innerHTML = "";
+            }
 
-                const commentsDiv = document.getElementById("binComments");
-                
-                // 🌟 หากมีกล่องข้อความว่าง "ยังไม่มีความคิดเห็น" อยู่ ให้ลบออกก่อนเพิ่มคอมเมนต์แรก
-                const placeholder = commentsDiv.querySelector(".empty-comment-placeholder");
-                if (placeholder) {
-                    commentsDiv.innerHTML = "";
-                }
+            const newComment = document.createElement("div");
+            newComment.className = "comment-card";
+            
+            newComment.innerHTML = `
+                <div style="width: 26px; height: 26px; background: #cbd5e0; border-radius: 50%; display: flex; align-items: center; justify-content: center; shrink: 0; flex-shrink: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; color: white;">
+                        <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="comment-main">
+                    <div class="comment-user-info"><span class="username">คุณ (ผู้ใช้)</span><span class="comment-time">เมื่อสักครู่</span></div>
+                    <span class="comment-text">${text}</span>
+                </div>`;
 
-                const newComment = document.createElement("div");
-                newComment.className = "comment-card";
-                
-                newComment.innerHTML = `
-                    <div style="width: 26px; height: 26px; background: #cbd5e0; border-radius: 50%; display: flex; align-items: center; justify-content: center; shrink: 0; flex-shrink: 0;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; color: white;">
-                            <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clip-rule="evenodd" />
-                        </svg>
-                    </div>
-                    <div class="comment-main">
-                        <div class="comment-user-info"><span class="username">คุณ (ผู้ใช้)</span><span class="comment-time">เมื่อสักครู่</span></div>
-                        <span class="comment-text">${text}</span>
-                    </div>`;
+            commentsDiv.appendChild(newComment);
+            reportInput.value = "";
+            commentsDiv.scrollTop = commentsDiv.scrollHeight;
+        });
 
-                commentsDiv.appendChild(newComment);
-                reportInput.value = "";
-                commentsDiv.scrollTop = commentsDiv.scrollHeight;
-            });
+        reportInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") submitBtn.click();
+        });
+    }
 
-            reportInput.addEventListener("keypress", (e) => {
-                if (e.key === "Enter") submitBtn.click();
-            });
-        }
+    // โหลดรูปภาพแผนที่และคำนวณสัดส่วน
+    const img = new Image();
+    img.src = imageUrl;
+    img.onload = function () {
+        const w = this.naturalWidth;
+        const h = this.naturalHeight;
+        const bounds = [[0, 0], [h, w]];
+
+        L.imageOverlay(imageUrl, bounds).addTo(map);
+
+        map.fitBounds(bounds, {
+            padding: [0, 0],
+            animate: false
+        });
+
+        const fitZoom = map.getBoundsZoom(bounds);
+        map.setMinZoom(fitZoom);
+        map.setZoom(fitZoom + 0.5);
+        map.setMaxBounds(bounds);
+
+        // บังคับให้อัปเดตขนาดซ้ำเพื่อความชัวร์บนมือถือ
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 300);
     };
+    
+    // รีเฟรชขนาดแผนที่ทันทีเมื่อเปิดเว็บบนเบราว์เซอร์มือถือสำเร็จ
+    window.addEventListener('resize', () => { map.invalidateSize(); });
+    setTimeout(() => { map.invalidateSize(); }, 500);
 }
