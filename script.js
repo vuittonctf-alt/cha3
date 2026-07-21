@@ -2,9 +2,67 @@
  * BS BINMAP - Application Script (Updated Sidebar Proportions & Empty State Text)
  */
 
-document.addEventListener("DOMContentLoaded", () => {
+const SUPABASE_URL = 'https://oxmbkykllivbwgfwqctb.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_GQ7oPb-T9han1h1I8Bs6Fg_VQaFLaNd';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+document.addEventListener("DOMContentLoaded", async () => {
+    await checkUserAuth();
     initMap();
+    setupImageViewer();
 });
+
+function setupImageViewer() {
+    const viewerModal = document.getElementById("imageViewerModal");
+    const fullImg = document.getElementById("fullImage");
+    const closeBtn = document.querySelector(".close-viewer-btn");
+
+    // เปิดเมื่อคลิกรูปในคอมเมนต์ หรือ รูป Preview ก่อนส่ง
+    document.addEventListener("click", (e) => {
+        if (e.target.classList.contains("comment-image") || e.target.id === "imagePreview") {
+            fullImg.src = e.target.src;
+            viewerModal.style.display = "flex";
+            viewerModal.style.opacity = "1";
+        }
+    });
+
+    // ปิดเมื่อคลิกปุ่มปิด หรือ คลิกพื้นที่ว่างข้างนอกรูป
+    const closeModal = () => {
+        viewerModal.style.display = "none";
+        fullImg.src = "";
+    };
+
+    if (closeBtn) closeBtn.addEventListener("click", closeModal);
+    viewerModal.addEventListener("click", (e) => {
+        if (e.target === viewerModal) closeModal();
+    });
+}
+
+async function checkUserAuth() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const authButtonsDiv = document.querySelector(".auth-buttons");
+
+    if (user) {
+        // Get user profile for the name
+        const { data: profile } = await supabaseClient
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single();
+
+        const userName = profile?.full_name || 'ผู้ใช้';
+        
+        authButtonsDiv.innerHTML = `
+            <span class="user-display-name" style="font-size: 0.88rem; font-weight: 600; color: var(--primary-light); margin-right: 10px;">สวัสดี, ${userName}</span>
+            <button class="btn-login" id="btnLogout">Log out</button>
+        `;
+
+        document.getElementById("btnLogout").addEventListener("click", async () => {
+            await supabaseClient.auth.signOut();
+            window.location.reload();
+        });
+    }
+}
 
 function initMap() {
     const imageUrl = "assets/BSMAP.jpg";
@@ -40,51 +98,89 @@ function initMap() {
         });
     }
 
-    // ฟังก์ชันอัปเดตหรือตรวจสอบกรณีไม่มีคอมเมนต์
-    function checkEmptyComments() {
-        const commentsDiv = document.getElementById("binComments");
-        if (!commentsDiv) return;
-        if (commentsDiv.children.length === 0) {
-            commentsDiv.innerHTML = `<div class="empty-comment-placeholder">ยังไม่มีความคิดเห็น</div>`;
+    const img = new Image();
+    img.src = imageUrl;
+
+    img.onload = function () {
+        const w = this.naturalWidth;
+        const h = this.naturalHeight;
+        const bounds = [[0, 0], [h, w]];
+
+        const imageOverlay = L.imageOverlay(imageUrl, bounds).addTo(map);
+
+// ให้รูปพอดีกับหน้าจอ
+map.fitBounds(bounds, {
+    padding: [0, 0],
+    animate: false
+});
+
+// คำนวณ Zoom ที่พอดี
+const fitZoom = map.getBoundsZoom(bounds);
+
+// ล็อกไม่ให้ Zoom ออกจนรูปเล็ก
+map.setMinZoom(fitZoom);
+
+// ใช้ Zoom ที่คำนวณได้
+console.log(map.getZoom());
+
+// จำกัดการลากออกนอกแผนที่
+map.setMaxBounds(bounds);
+
+// รีเฟรชหลังโหลดเสร็จ
+setTimeout(() => {
+    map.invalidateSize();
+    map.fitBounds(bounds, {
+        padding: [0, 0],
+        animate: false
+    });
+}, 100);
+
+        // ฟังก์ชันอัปเดตหรือตรวจสอบกรณีไม่มีคอมเมนต์
+        function checkEmptyComments() {
+            const commentsDiv = document.getElementById("binComments");
+            // ถ้าไม่มีลูกอยู่เลย หรือมีแต่ข้อความว่างเปล่า ให้ใส่ข้อความเริ่มต้น
+            if (commentsDiv.children.length === 0) {
+                commentsDiv.innerHTML = `<div class="empty-comment-placeholder">ยังไม่มีความคิดเห็น</div>`;
+            }
         }
-    }
 
-    function bindMarkerEvents(marker, data) {
-        marker.on("click", (e) => {
-            L.DomEvent.stopPropagation(e); 
+        function bindMarkerEvents(marker, data) {
+            marker.on("click", (e) => {
+                L.DomEvent.stopPropagation(e); 
+                
+                exitAddMode();
 
-            exitAddMode();
 
-            document.getElementById("sidebarPlaceholder").style.display = "none";
-            document.getElementById("sidebarContent").style.display = "flex";
+                document.getElementById("sidebarPlaceholder").style.display = "none";
+                document.getElementById("sidebarContent").classList.add("show");
 
-            document.getElementById("binTitle").textContent = data.title;
-            document.getElementById("binType").textContent = data.type;
-            document.getElementById("binColor").textContent = data.color;
-            document.getElementById("binLocation").textContent = data.location;
-            document.getElementById("binUpdate").textContent = data.update;
-            document.getElementById("binImage").src = data.image;
 
-            document.getElementById("binComments").innerHTML = ``;
-            checkEmptyComments();
-        });
-    }
+                document.getElementById("binTitle").textContent = data.title;
+                document.getElementById("binType").textContent = data.type;
+                document.getElementById("binColor").textContent = data.color;
+                document.getElementById("binLocation").textContent = data.location;
+                document.getElementById("binUpdate").textContent = data.update;
+                document.getElementById("binImage").src = data.image;
 
-    // ===================================================
-    // 🔄 ฟังก์ชัน จัดการสถานะโหมดเพิ่มถังขยะ
-    // ===================================================
-    const modeBtn = document.getElementById("addBinModeBtn");
+                // 🌟 เคลียร์ค่าเริ่มต้น และเรียกฟังก์ชันใส่คำว่า "ยังไม่มีความคิดเห็น"
+                document.getElementById("binComments").innerHTML = ``;
+                checkEmptyComments();
+            });
+        }
 
-    function exitAddMode() {
-        isAddMode = false;
-        if (modeBtn) {
+
+        // ===================================================
+        // 🔄 ฟังก์ชัน จัดการสถานะโหมดเพิ่มถังขยะ
+        // ===================================================
+        const modeBtn = document.getElementById("addBinModeBtn");
+
+        function exitAddMode() {
+            isAddMode = false;
             modeBtn.classList.remove("active");
             modeBtn.querySelector("span").textContent = "เพิ่มถังขยะ";
+            document.getElementById("addBinModal").style.display = "none";
         }
-        document.getElementById("addBinModal").style.display = "none";
-    }
 
-    if (modeBtn) {
         modeBtn.addEventListener("click", () => {
             isAddMode = !isAddMode; 
 
@@ -96,26 +192,25 @@ function initMap() {
                 exitAddMode();
             }
         });
-    }
 
-    // ===================================================
-    // 📍 EVENT: คลิกบนแผนที่ -> เปิดหน้าต่างลอย (Modal)
-    // ===================================================
-    map.on("click", (e) => {
-        if (!isAddMode) return; 
 
-        tempLatLng = e.latlng; 
+        // ===================================================
+        // 📍 EVENT: คลิกบนแผนที่ -> เปิดหน้าต่างลอย (Modal)
+        // ===================================================
+        map.on("click", (e) => {
+            if (!isAddMode) return; 
 
-        document.getElementById("addBinModal").style.display = "flex";
-        document.getElementById("newBinLocation").value = "";
-    });
+            tempLatLng = e.latlng; 
 
-    // ===================================================
-    // 💾 EVENT: ปุ่มบันทึกข้อมูลถังขยะใหม่ในหน้าต่างลอย
-    // ===================================================
-    const saveBinBtn = document.getElementById("saveBinBtn");
-    if (saveBinBtn) {
-        saveBinBtn.addEventListener("click", () => {
+            document.getElementById("addBinModal").style.display = "flex";
+            document.getElementById("newBinLocation").value = "";
+        });
+
+
+        // ===================================================
+        // 💾 EVENT: ปุ่มบันทึกข้อมูลถังขยะใหม่ในหน้าต่างลอย
+        // ===================================================
+        document.getElementById("saveBinBtn").addEventListener("click", () => {
             const type = document.getElementById("newBinType").value;
             const locationInput = document.getElementById("newBinLocation").value.trim();
 
@@ -152,96 +247,153 @@ function initMap() {
             tempLatLng = null; 
             newMarker.fire("click"); 
         });
-    }
 
-    // ===================================================
-    // EVENT: กลุ่มปุ่มปิดหน้าต่างต่างๆ
-    // ===================================================
-    const closeSidebarBtn = document.querySelector(".close-sidebar-btn");
-    if (closeSidebarBtn) {
-        closeSidebarBtn.addEventListener("click", () => {
-            document.getElementById("sidebarContent").style.display = "none";
-            document.getElementById("sidebarPlaceholder").style.display = "flex";
+
+        // ===================================================
+        // EVENT: กลุ่มปุ่มปิดหน้าต่างต่างๆ
+        // ===================================================
+        document.querySelector(".close-sidebar-btn").addEventListener("click", () => {
+            document.getElementById("sidebarContent").classList.remove("show");
+            setTimeout(() => {
+                document.getElementById("sidebarPlaceholder").style.display = "flex";
+            }, 400);
         });
-    }
 
-    const closeModalBtn = document.getElementById("closeModalBtn");
-    if (closeModalBtn) {
-        closeModalBtn.addEventListener("click", () => {
+
+        document.getElementById("closeModalBtn").addEventListener("click", () => {
             exitAddMode();
         });
-    }
 
-    // ===================================================
-    // EVENT: พิมพ์ส่งคอมเมนต์ในกล่องแชทหลัก
-    // ===================================================
-    const submitBtn = document.querySelector(".submit-report-btn");
-    const reportInput = document.querySelector(".report-input");
 
-    if (submitBtn && reportInput) {
-        submitBtn.addEventListener("click", () => {
-            const text = reportInput.value.trim();
-            if (text === "") return;
+        // ===================================================
+        // EVENT: พิมพ์ส่งคอมเมนต์ในกล่องแชทหลัก (ปรับปรุงให้เจาะจงพื้นที่)
+        // ===================================================
+        const feedbackBox = document.querySelector(".combined-feedback-box");
+        if (feedbackBox) {
+            const submitBtn = feedbackBox.querySelector(".submit-report-btn");
+            const reportInput = feedbackBox.querySelector(".report-input");
+            const uploadBtn = feedbackBox.querySelector("#uploadImageBtn");
+            const imageInput = feedbackBox.querySelector("#imageInput");
+            const previewContainer = feedbackBox.querySelector("#imagePreviewContainer");
+            const previewImg = feedbackBox.querySelector("#imagePreview");
+            const removeImgBtn = feedbackBox.querySelector("#removeImageBtn");
 
-            const commentsDiv = document.getElementById("binComments");
-            if (!commentsDiv) return;
-            
-            const placeholder = commentsDiv.querySelector(".empty-comment-placeholder");
-            if (placeholder) {
-                commentsDiv.innerHTML = "";
+            // 1. คลิกปุ่มอัปโหลด -> เปิดหน้าต่างเลือกไฟล์
+            if (uploadBtn && imageInput) {
+                uploadBtn.addEventListener("click", async () => {
+                    const { data: { user } } = await supabaseClient.auth.getUser();
+                    if (!user) {
+                        alert("กรุณา Log in เพื่ออัปโหลดรูปภาพครับ");
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    imageInput.click();
+                });
             }
 
-            const newComment = document.createElement("div");
-            newComment.className = "comment-card";
-            
-            newComment.innerHTML = `
-                <div style="width: 26px; height: 26px; background: #cbd5e0; border-radius: 50%; display: flex; align-items: center; justify-content: center; shrink: 0; flex-shrink: 0;">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; color: white;">
-                        <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <div class="comment-main">
-                    <div class="comment-user-info"><span class="username">คุณ (ผู้ใช้)</span><span class="comment-time">เมื่อสักครู่</span></div>
-                    <span class="comment-text">${text}</span>
-                </div>`;
+            // 2. เมื่อเลือกไฟล์ -> แสดง Preview
+            if (imageInput) {
+                imageInput.addEventListener("change", () => {
+                    const file = imageInput.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            previewImg.src = e.target.result;
+                            previewContainer.style.display = "block";
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
 
-            commentsDiv.appendChild(newComment);
-            reportInput.value = "";
-            commentsDiv.scrollTop = commentsDiv.scrollHeight;
-        });
+            // 3. ปุ่มลบรูป Preview
+            if (removeImgBtn) {
+                removeImgBtn.addEventListener("click", () => {
+                    imageInput.value = "";
+                    previewContainer.style.display = "none";
+                });
+            }
 
-        reportInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") submitBtn.click();
-        });
-    }
+            if (submitBtn && reportInput) {
+                submitBtn.addEventListener("click", async () => {
+                    const { data: { user } } = await supabaseClient.auth.getUser();
+                    if (!user) {
+                        alert("กรุณา Log in เพื่อแสดงความคิดเห็นครับ");
+                        window.location.href = 'login.html';
+                        return;
+                    }
 
-    // โหลดรูปภาพแผนที่และคำนวณสัดส่วน
-    const img = new Image();
-    img.src = imageUrl;
-    img.onload = function () {
-        const w = this.naturalWidth;
-        const h = this.naturalHeight;
-        const bounds = [[0, 0], [h, w]];
+                    const text = reportInput.value.trim();
+                    const imageFile = imageInput.files[0];
+                    if (text === "" && !imageFile) return;
 
-        L.imageOverlay(imageUrl, bounds).addTo(map);
+                    const { data: profile } = await supabaseClient
+                        .from('profiles')
+                        .select('full_name')
+                        .eq('id', user.id)
+                        .single();
+                    
+                    const displayUserName = profile?.full_name || 'ผู้ใช้';
+                    let uploadedImageUrl = null;
 
-        map.fitBounds(bounds, {
-            padding: [0, 0],
-            animate: false
-        });
+                    // 🌟 จัดการอัปโหลดรูปภาพขึ้น Supabase Storage
+                    if (imageFile) {
+                        const fileExt = imageFile.name.split('.').pop();
+                        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+                        
+                        const { data: uploadData, error: uploadError } = await supabaseClient.storage
+                            .from('bin-images')
+                            .upload(fileName, imageFile);
 
-        const fitZoom = map.getBoundsZoom(bounds);
-        map.setMinZoom(fitZoom);
-        map.setZoom(fitZoom + 0.5);
-        map.setMaxBounds(bounds);
+                        if (uploadError) {
+                            alert("เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ: " + uploadError.message);
+                            return;
+                        }
 
-        // บังคับให้อัปเดตขนาดซ้ำเพื่อความชัวร์บนมือถือ
-        setTimeout(() => {
-            map.invalidateSize();
-        }, 300);
+                        const { data: publicUrlData } = supabaseClient.storage
+                            .from('bin-images')
+                            .getPublicUrl(fileName);
+                        
+                        uploadedImageUrl = publicUrlData.publicUrl;
+                    }
+
+                    const commentsDiv = document.getElementById("binComments");
+                    const placeholder = commentsDiv.querySelector(".empty-comment-placeholder");
+                    if (placeholder) {
+                        commentsDiv.innerHTML = "";
+                    }
+
+                    const newComment = document.createElement("div");
+                    newComment.className = "comment-card";
+                    
+                    let imageHtml = uploadedImageUrl ? `<img src="${uploadedImageUrl}" class="comment-image" style="width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: var(--transition);" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">` : "";
+
+
+                    newComment.innerHTML = `
+                        <div style="width: 30px; height: 30px; background: #cbd5e0; border-radius: 50%; display: flex; align-items: center; justify-content: center; shrink: 0; flex-shrink: 0;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; color: white;">
+                                <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="comment-main">
+                            <div class="comment-user-info"><span class="username">${displayUserName}</span><span class="comment-time">เมื่อสักครู่</span></div>
+                            ${imageHtml}
+                            <span class="comment-text">${text}</span>
+                        </div>`;
+
+                    commentsDiv.appendChild(newComment);
+                    
+                    // Reset fields
+                    reportInput.value = "";
+                    imageInput.value = "";
+                    previewContainer.style.display = "none";
+                    commentsDiv.scrollTop = commentsDiv.scrollHeight;
+                });
+
+                reportInput.addEventListener("keypress", (e) => {
+                    if (e.key === "Enter") submitBtn.click();
+                });
+            }
+        }
     };
-    
-    // รีเฟรชขนาดแผนที่ทันทีเมื่อเปิดเว็บบนเบราว์เซอร์มือถือสำเร็จ
-    window.addEventListener('resize', () => { map.invalidateSize(); });
-    setTimeout(() => { map.invalidateSize(); }, 500);
 }
